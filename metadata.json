@@ -1,0 +1,8 @@
+{
+  "name": "Remix LAU StudyLink — Peer Tutoring Platform",
+  "description": "A student-to-student peer tutoring and booking platform for Lebanese American University (LAU) across Beirut and Byblos campuses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
