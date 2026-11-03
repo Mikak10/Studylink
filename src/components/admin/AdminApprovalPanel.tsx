@@ -19,6 +19,7 @@ import {
   Sparkles,
   ArrowRight,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 
 export const AdminApprovalPanel: React.FC = () => {
@@ -29,6 +30,7 @@ export const AdminApprovalPanel: React.FC = () => {
     activePersona,
     currentUser,
     setActivePersonaId,
+    resetDemoData,
   } = useStudyLinkData();
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | ApplicationStatus>('PENDING');
@@ -39,6 +41,8 @@ export const AdminApprovalPanel: React.FC = () => {
   const [selectedAppForAction, setSelectedAppForAction] = useState<TutorApplication | null>(null);
   const [actionType, setActionType] = useState<'APPROVE' | 'REJECT' | null>(null);
   const [adminNoteInput, setAdminNoteInput] = useState('');
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin' || activePersona.role === 'admin';
 
@@ -128,18 +132,30 @@ export const AdminApprovalPanel: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 shrink-0">
-              <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-900 font-black text-sm flex items-center justify-center shadow-xs">
-                {currentUser?.role === 'admin' ? 'MM' : 'ADM'}
-              </div>
-              <div className="text-left text-xs">
-                <div className="font-bold text-white">
-                  {currentUser?.name || 'Dr. Mona Majdalani'}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs border border-rose-400/40 cursor-pointer"
+                title="Reset all database records in Firebase back to clean demo baseline"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Demo Data</span>
+              </button>
+
+              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 shrink-0">
+                <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-900 font-black text-sm flex items-center justify-center shadow-xs">
+                  {currentUser?.role === 'admin' ? 'MM' : 'ADM'}
                 </div>
-                <div className="text-emerald-200 text-[11px]">Academic Coordinator</div>
-                <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-600/60 rounded text-[10px] font-mono text-emerald-100 font-semibold">
-                  Administrator
-                </span>
+                <div className="text-left text-xs">
+                  <div className="font-bold text-white">
+                    {currentUser?.name || 'Dr. Mona Majdalani'}
+                  </div>
+                  <div className="text-emerald-200 text-[11px]">Academic Coordinator</div>
+                  <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-600/60 rounded text-[10px] font-mono text-emerald-100 font-semibold">
+                    Administrator
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -609,6 +625,62 @@ export const AdminApprovalPanel: React.FC = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Demo Data Confirmation Dialog Modal */}
+      {isResetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-rose-100 bg-rose-50/70 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-700 text-white flex items-center justify-center">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-rose-950">
+                  Reset Database to Demo Baseline?
+                </h3>
+                <p className="text-xs text-rose-800 mt-0.5">
+                  Restricted to LAU Administrators only.
+                </p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3 text-xs text-slate-600 leading-relaxed">
+              <p>
+                This will reset all <strong>Tutors</strong>, <strong>Bookings</strong>, <strong>Reviews</strong>, <strong>Tutor Applications</strong>, and <strong>User Accounts</strong> in the Firebase backend to their clean initial demo baseline.
+              </p>
+              <p className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                ✓ All open browser tabs and Incognito sessions will synchronize to the baseline in real-time.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={async () => {
+                  setIsResetting(true);
+                  try {
+                    await resetDemoData();
+                    setIsResetConfirmOpen(false);
+                  } finally {
+                    setIsResetting(false);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-700 hover:bg-rose-800 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                {isResetting ? 'Resetting Database...' : 'Confirm Reset to Demo'}
+              </button>
             </div>
           </div>
         </div>

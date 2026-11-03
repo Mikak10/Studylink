@@ -21,6 +21,17 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_APPLICATIONS,
 } from '../data/seedData';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  onSnapshot,
+  writeBatch,
+} from 'firebase/firestore';
+import { db, testFirestoreConnection } from '../lib/firebase';
 
 interface DataContextType {
   // Authentication & Users
@@ -51,7 +62,7 @@ interface DataContextType {
   addTutorFeedback: (bookingId: string, feedback: string) => void;
   registerTutor: (newTutor: Omit<TutorProfile, 'id' | 'rating' | 'totalReviews' | 'totalSessionsCompleted'>) => TutorProfile;
   updateTutorProfile: (tutorId: string, updates: Partial<TutorProfile>) => void;
-  resetDemoData: () => void;
+  resetDemoData: () => Promise<void>;
   getTutorById: (tutorId: string) => TutorProfile | undefined;
   getReviewsForTutor: (tutorId: string) => Review[];
   getBookingsForStudent: (studentId: string) => Booking[];
@@ -75,60 +86,44 @@ interface DataContextType {
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
   addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void;
+  isFirebaseConnected: boolean;
 }
 
 const STORAGE_KEYS = {
-  ACCOUNTS: 'lausl_accounts_v2',
   CURRENT_USER: 'lausl_current_user_v2',
-  PERSONA: 'lausl_persona_v2',
-  TUTORS: 'lausl_tutors_v2',
-  BOOKINGS: 'lausl_bookings_v2',
-  REVIEWS: 'lausl_reviews_v2',
-  NOTIFICATIONS: 'lausl_notifications_v2',
-  APPLICATIONS: 'lausl_applications_v2',
 };
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Registered Accounts
-  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ACCOUNTS) || localStorage.getItem('lausl_accounts_v2');
-      if (saved) {
-        const parsed: UserAccount[] = JSON.parse(saved);
-        // Ensure all INITIAL_ACCOUNTS (specifically admin, sami, nour, karim, ziad) are present
-        const existingIds = new Set(parsed.map(a => a.id));
-        const missing = INITIAL_ACCOUNTS.filter(
-          a => !existingIds.has(a.id) && !parsed.some(p => p.username.toLowerCase() === a.username.toLowerCase())
-        );
-        let merged = [...parsed, ...missing];
-        // Guarantee admin account has role 'admin'
-        merged = merged.map(a =>
-          a.id === 'admin' || a.username.toLowerCase() === 'admin' ? { ...a, role: 'admin' as const } : a
-        );
-        return merged;
-      }
-      return INITIAL_ACCOUNTS;
-    } catch {
-      return INITIAL_ACCOUNTS;
-    }
-  });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // Test connection on mount
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
-  }, [accounts]);
+    testFirestoreConnection().then(connected => {
+      setIsFirebaseConnected(connected);
+    });
+  }, []);
+
+  // 1. Registered Accounts
+  const [accounts, setAccounts] = useState<UserAccount[]>(INITIAL_ACCOUNTS);
 
   // 2. Current Logged-in User (Session-scoped: starts signed out by default whenever opening the app)
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
-      // Clean up any legacy persistent user from localStorage so Chrome never auto-logs in as admin
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       localStorage.removeItem('lausl_current_user_v2');
       localStorage.removeItem('lausl_persona_v2');
       localStorage.removeItem('lausl_persona');
 
-      // Check active browser tab session only
       const saved = sessionStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (saved) return JSON.parse(saved);
       return null;
@@ -144,7 +139,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       }
-      // Always guarantee localStorage has no persistent user login
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       localStorage.removeItem('lausl_current_user_v2');
     } catch {}
@@ -198,7 +192,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         major: 'Prospective Student',
       };
 
-  // Quick switch between accounts (Guaranteed to work for admin, tutors, students, and guests)
   const setActivePersonaId = (id: PersonaId) => {
     if (id === 'guest') {
       setCurrentUser(null);
@@ -206,37 +199,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // 1. Look in active accounts
     let matchedAccount = accounts.find(
       a => a.id === id || a.username.toLowerCase() === id.toLowerCase()
     );
 
-    // 2. Fallback to INITIAL_ACCOUNTS if not found in state
     if (!matchedAccount) {
       const initialMatch = INITIAL_ACCOUNTS.find(
         a => a.id === id || a.username.toLowerCase() === id.toLowerCase()
       );
       if (initialMatch) {
         matchedAccount = initialMatch;
-        setAccounts(prev => [initialMatch, ...prev.filter(a => a.id !== initialMatch.id)]);
       }
-    }
-
-    // 3. Explicit fallback for admin persona
-    if (!matchedAccount && id === 'admin') {
-      matchedAccount = {
-        id: 'admin',
-        username: 'admin',
-        email: 'mona.majdalani@lau.edu',
-        password: 'password123',
-        name: 'Dr. Mona Majdalani',
-        role: 'admin',
-        campus: 'Beirut',
-        major: 'LAU Academic & Tutoring Coordinator',
-        avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
-        createdAt: '2026-08-01T10:00:00.000Z',
-      };
-      setAccounts(prev => [matchedAccount!, ...prev.filter(a => a.id !== 'admin')]);
     }
 
     if (matchedAccount) {
@@ -256,7 +229,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         acc.password === cleanPassword
     );
 
-    // Resilient fallback to seed accounts
     if (!matched) {
       const initMatch = INITIAL_ACCOUNTS.find(
         acc =>
@@ -281,12 +253,186 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true, user: matched };
   };
 
-  // Signup handler
+  // Logout handler
+  const logout = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem('lausl_current_user_v2');
+    } catch {}
+    setCurrentUser(null);
+    showToast('You have been signed out.');
+  };
+
+  // Domain Catalog State
+  const [courses] = useState<Course[]>(INITIAL_COURSES);
+  const [tutors, setTutors] = useState<TutorProfile[]>(INITIAL_TUTORS);
+  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
+  const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
+  const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
+  const [tutorApplications, setTutorApplications] = useState<TutorApplication[]>(INITIAL_APPLICATIONS);
+
+  // =========================================================================
+  // FIREBASE REAL-TIME LISTENERS & AUTO-SEEDING
+  // =========================================================================
+
+  // 1. Sync Tutors
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'tutors'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_TUTORS.forEach(t => {
+          batch.set(doc(db, 'tutors', t.id), t);
+        });
+        await batch.commit().catch(console.error);
+        setTutors(INITIAL_TUTORS);
+      } else {
+        const remoteTutors = snapshot.docs.map(d => d.data() as TutorProfile);
+        setTutors(remoteTutors);
+      }
+    }, err => {
+      console.warn('Firestore tutors listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // 2. Sync Bookings
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'bookings'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_BOOKINGS.forEach(b => {
+          batch.set(doc(db, 'bookings', b.id), b);
+        });
+        await batch.commit().catch(console.error);
+        setBookings(INITIAL_BOOKINGS);
+      } else {
+        const remoteBookings = snapshot.docs.map(d => d.data() as Booking);
+        setBookings(remoteBookings);
+      }
+    }, err => {
+      console.warn('Firestore bookings listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // 3. Sync Reviews
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'reviews'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_REVIEWS.forEach(r => {
+          batch.set(doc(db, 'reviews', r.id), r);
+        });
+        await batch.commit().catch(console.error);
+        setReviews(INITIAL_REVIEWS);
+      } else {
+        const remoteReviews = snapshot.docs.map(d => d.data() as Review);
+        setReviews(remoteReviews);
+      }
+    }, err => {
+      console.warn('Firestore reviews listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // 4. Sync Accounts
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'accounts'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_ACCOUNTS.forEach(a => {
+          batch.set(doc(db, 'accounts', a.id), a);
+        });
+        await batch.commit().catch(console.error);
+        setAccounts(INITIAL_ACCOUNTS);
+      } else {
+        const remoteAccounts = snapshot.docs.map(d => d.data() as UserAccount);
+        const hasAdmin = remoteAccounts.some(a => a.id === 'admin' || a.username.toLowerCase() === 'admin');
+        if (!hasAdmin) {
+          const adminAccount = INITIAL_ACCOUNTS.find(a => a.id === 'admin')!;
+          setDoc(doc(db, 'accounts', 'admin'), adminAccount).catch(console.error);
+          setAccounts([...remoteAccounts, adminAccount]);
+        } else {
+          setAccounts(remoteAccounts);
+        }
+      }
+    }, err => {
+      console.warn('Firestore accounts listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // 5. Sync Tutor Applications
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'applications'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_APPLICATIONS.forEach(a => {
+          batch.set(doc(db, 'applications', a.id), a);
+        });
+        await batch.commit().catch(console.error);
+        setTutorApplications(INITIAL_APPLICATIONS);
+      } else {
+        const remoteApps = snapshot.docs.map(d => d.data() as TutorApplication);
+        setTutorApplications(remoteApps);
+      }
+    }, err => {
+      console.warn('Firestore applications listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // 6. Sync Notifications
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'notifications'), async snapshot => {
+      if (snapshot.empty) {
+        const batch = writeBatch(db);
+        INITIAL_NOTIFICATIONS.forEach(n => {
+          batch.set(doc(db, 'notifications', n.id), n);
+        });
+        await batch.commit().catch(console.error);
+        setNotifications(INITIAL_NOTIFICATIONS);
+      } else {
+        const remoteNotifs = snapshot.docs.map(d => d.data() as AppNotification);
+        setNotifications(remoteNotifs);
+      }
+    }, err => {
+      console.warn('Firestore notifications listener warning:', err);
+    });
+    return () => unsub();
+  }, []);
+
+  // Notification helper
+  const addNotification = (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
+    const newId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newNotif: AppNotification = {
+      ...n,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+    setDoc(doc(db, 'notifications', newId), newNotif).catch(console.error);
+  };
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+    updateDoc(doc(db, 'notifications', id), { read: true }).catch(console.error);
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    notifications.filter(n => !n.read).forEach(n => {
+      updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(console.error);
+    });
+  };
+
+  // Signup
   const signup = (data: Omit<UserAccount, 'id' | 'createdAt'>) => {
     const cleanUsername = data.username.trim().toLowerCase();
     const cleanEmail = data.email.trim().toLowerCase();
 
-    // Check unique username or email
     const exists = accounts.some(
       a => a.username.toLowerCase() === cleanUsername || a.email.toLowerCase() === cleanEmail
     );
@@ -301,7 +447,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newId = `user-${Date.now()}`;
     let newTutorProfileId: string | undefined = undefined;
 
-    // If registering as a tutor, auto-provision a starter tutor profile so they appear in discovery
     if (data.role === 'tutor') {
       newTutorProfileId = `tutor-${Date.now()}`;
       const newTutorProfile: TutorProfile = {
@@ -327,6 +472,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ],
       };
       setTutors(prev => [newTutorProfile, ...prev]);
+      setDoc(doc(db, 'tutors', newTutorProfileId), newTutorProfile).catch(console.error);
     }
 
     const newAccount: UserAccount = {
@@ -339,625 +485,441 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setAccounts(prev => [newAccount, ...prev]);
+    setDoc(doc(db, 'accounts', newId), newAccount).catch(console.error);
+
     setCurrentUser(newAccount);
     showToast(`Account created successfully! Welcome to LAU StudyLink, ${newAccount.name}.`);
     return { success: true, user: newAccount };
   };
 
-  // Logout handler
-  const logout = () => {
-    try {
-      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-      localStorage.removeItem('lausl_current_user_v2');
-    } catch {}
-    setCurrentUser(null);
-    showToast('You have been signed out.');
-  };
-
-  // 5. Courses State
-  const [courses] = useState<Course[]>(INITIAL_COURSES);
-
-  // 6. Tutors State
-  const [tutors, setTutors] = useState<TutorProfile[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.TUTORS);
-      return saved ? JSON.parse(saved) : INITIAL_TUTORS;
-    } catch {
-      return INITIAL_TUTORS;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TUTORS, JSON.stringify(tutors));
-  }, [tutors]);
-
-  // 7. Bookings State
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
-      return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
-    } catch {
-      return INITIAL_BOOKINGS;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
-  }, [bookings]);
-
-  // 8. Reviews State
-  const [reviews, setReviews] = useState<Review[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.REVIEWS);
-      return saved ? JSON.parse(saved) : INITIAL_REVIEWS;
-    } catch {
-      return INITIAL_REVIEWS;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(reviews));
-  }, [reviews]);
-
-  // 9. Notifications State
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    } catch {
-      return INITIAL_NOTIFICATIONS;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-  }, [notifications]);
-
-  // 10. Tutor Applications State (Admin Approval Workflow)
-  const [tutorApplications, setTutorApplications] = useState<TutorApplication[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.APPLICATIONS) || localStorage.getItem('lausl_applications_v2');
-      if (saved) {
-        const parsed: TutorApplication[] = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          // Ensure all initial applications exist
-          const existingIds = new Set(parsed.map(a => a.id));
-          const missing = INITIAL_APPLICATIONS.filter(a => !existingIds.has(a.id));
-          return [...parsed, ...missing];
-        }
-      }
-      return INITIAL_APPLICATIONS;
-    } catch {
-      return INITIAL_APPLICATIONS;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(tutorApplications));
-  }, [tutorApplications]);
-
-  const addNotification = (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
-    const newNotif: AppNotification = {
-      ...n,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      createdAt: new Date().toISOString(),
-      read: false,
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-  };
-
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
-  };
-
-  const markAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    showToast('All notifications marked as read.');
-  };
-
-  // Toast State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(prev => (prev === msg ? null : prev));
-    }, 3800);
-  };
-
-  // Conflict detection
-  const isSlotAlreadyBooked = (tutorId: string, date: string, timeSlot: string): boolean => {
-    return bookings.some(
-      b =>
-        b.tutorId === tutorId &&
-        b.date === date &&
-        b.timeSlot === timeSlot &&
-        (b.status === 'PENDING' || b.status === 'CONFIRMED')
-    );
-  };
-
-  // Create booking
-  const createBooking = (bookingData: Omit<Booking, 'id' | 'createdAt' | 'status'>) => {
-    // Self-booking prevention: A student-tutor cannot book a session with themselves
-    const targetTutor = tutors.find(t => t.id === bookingData.tutorId);
-    const isSelfBooking =
-      bookingData.studentId === bookingData.tutorId ||
-      (currentUser?.tutorProfileId && currentUser.tutorProfileId === bookingData.tutorId) ||
-      (activePersona.tutorProfileId && activePersona.tutorProfileId === bookingData.tutorId) ||
-      (targetTutor && currentUser?.email && targetTutor.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-      (targetTutor && activePersona.email && targetTutor.email.toLowerCase() === activePersona.email.toLowerCase()) ||
-      (targetTutor && currentUser?.name && targetTutor.fullName.toLowerCase() === currentUser.name.toLowerCase()) ||
-      (targetTutor && activePersona.name && targetTutor.fullName.toLowerCase() === activePersona.name.toLowerCase());
-
-    if (isSelfBooking) {
-      return {
-        success: false,
-        error: 'You cannot book a tutoring session with yourself. As an LAU tutor, you can request peer tutoring sessions with any other tutor on the platform.',
-      };
-    }
-
-    if (isSlotAlreadyBooked(bookingData.tutorId, bookingData.date, bookingData.timeSlot)) {
-      return {
-        success: false,
-        error: `This time slot (${bookingData.timeSlot} on ${bookingData.date}) has already been requested or confirmed for this tutor. Please pick another available slot.`,
-      };
-    }
-
-    const newBooking: Booking = {
-      ...bookingData,
-      id: `b-${Date.now()}`,
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-    };
-
-    setBookings(prev => [newBooking, ...prev]);
-
-    // Send notification to the tutor
-    addNotification({
-      recipientUserId: bookingData.tutorId,
-      title: 'New Booking Request',
-      message: `${bookingData.studentName} requested a session for ${bookingData.courseCode} on ${bookingData.date} (${bookingData.timeSlot}).`,
-      type: 'BOOKING_REQUEST',
-      bookingId: newBooking.id,
-    });
-
-    // Send notification to the student confirming request was placed
-    const studentRecipientId = currentUser?.id || currentUser?.username || bookingData.studentId;
-    addNotification({
-      recipientUserId: studentRecipientId,
-      title: 'Booking Request Submitted',
-      message: `Your session request for ${bookingData.courseCode} with ${bookingData.tutorName} on ${bookingData.date} (${bookingData.timeSlot}) has been submitted! Waiting for tutor confirmation.`,
-      type: 'BOOKING_REQUEST',
-      bookingId: newBooking.id,
-    });
-
-    showToast(`Booking request submitted! Waiting for ${bookingData.tutorName} to confirm.`);
-    return { success: true, booking: newBooking };
-  };
-
-  // Update booking status
-  const updateBookingStatus = (bookingId: string, status: BookingStatus, declineReason?: string) => {
-    setBookings(prev =>
-      prev.map(b => {
-        if (b.id === bookingId) {
-          return {
-            ...b,
-            status,
-            declineReason: declineReason ?? b.declineReason,
-          };
-        }
-        return b;
-      })
-    );
-
-    const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      if (status === 'CONFIRMED') {
-        showToast(`Session with ${booking.studentName} has been confirmed!`);
-        addNotification({
-          recipientUserId: booking.studentId,
-          title: 'Booking Confirmed!',
-          message: `Tutor ${booking.tutorName} accepted your session for ${booking.courseCode} on ${booking.date} at ${booking.timeSlot}.`,
-          type: 'BOOKING_CONFIRMED',
-          bookingId,
-        });
-      } else if (status === 'CANCELLED') {
-        showToast(`Session with ${booking.studentName} was declined.`);
-        addNotification({
-          recipientUserId: booking.studentId,
-          title: 'Session Request Declined',
-          message: `Your request for ${booking.courseCode} with ${booking.tutorName} was declined.${declineReason ? ` Reason: ${declineReason}` : ''}`,
-          type: 'BOOKING_CANCELLED',
-          bookingId,
-        });
-      } else if (status === 'COMPLETED') {
-        showToast(`Session marked as completed.`);
-        addNotification({
-          recipientUserId: booking.studentId,
-          title: 'Session Completed',
-          message: `Your session for ${booking.courseCode} with ${booking.tutorName} has concluded. Please leave a review!`,
-          type: 'SESSION_COMPLETED',
-          bookingId,
-        });
-      }
-    }
-  };
-
-  // Cancel booking
-  const cancelBooking = (bookingId: string, reason?: string) => {
-    updateBookingStatus(bookingId, 'CANCELLED', reason || 'Cancelled by student');
-  };
-
-  // Tutor leaves feedback & study notes for student
-  const addTutorFeedback = (bookingId: string, feedback: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    setBookings(prev =>
-      prev.map(b =>
-        b.id === bookingId
-          ? { ...b, tutorFeedback: feedback, tutorFeedbackDate: today }
-          : b
-      )
-    );
-    const targetBooking = bookings.find(b => b.id === bookingId);
-    if (targetBooking) {
-      addNotification({
-        recipientUserId: targetBooking.studentId,
-        title: 'Tutor Session Feedback Added',
-        message: `${targetBooking.tutorName} added study notes & recommendations for your ${targetBooking.courseCode} session.`,
-        type: 'TUTOR_FEEDBACK',
-        bookingId,
-      });
-      showToast('Session feedback & study notes saved for the student.');
-    }
-  };
-
-  // Add review
-  const addReview = (reviewData: Omit<Review, 'id' | 'date'>) => {
-    const newReview: Review = {
-      ...reviewData,
-      id: `rev-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
-    };
-
-    setReviews(prev => [newReview, ...prev]);
-
-    setBookings(prev =>
-      prev.map(b => (b.id === reviewData.bookingId ? { ...b, reviewSubmitted: true } : b))
-    );
-
-    setTutors(prev =>
-      prev.map(t => {
-        if (t.id === reviewData.tutorId) {
-          const tutorAllReviews = [newReview, ...reviews.filter(r => r.tutorId === t.id)];
-          const sum = tutorAllReviews.reduce((acc, r) => acc + r.rating, 0);
-          const avg = Number((sum / tutorAllReviews.length).toFixed(1));
-          return {
-            ...t,
-            rating: avg,
-            totalReviews: tutorAllReviews.length,
-          };
-        }
-        return t;
-      })
-    );
-
-    showToast('Feedback submitted successfully! Thank you for supporting peer learning.');
-  };
-
-  // Register tutor
-  const registerTutor = (newTutor: Omit<TutorProfile, 'id' | 'rating' | 'totalReviews' | 'totalSessionsCompleted'>): TutorProfile => {
-    const tutor: TutorProfile = {
-      ...newTutor,
-      id: `tutor-${Date.now()}`,
-      rating: 5.0,
-      totalReviews: 0,
-      totalSessionsCompleted: 0,
-    };
-    setTutors(prev => [tutor, ...prev]);
-    showToast(`Congratulations ${newTutor.fullName}! Your tutor profile has been created.`);
-    return tutor;
-  };
-
-  // Submit tutor application (Any student can apply, reviewed by Admin)
-  const submitTutorApplication = (
-    data: Omit<TutorApplication, 'id' | 'status' | 'submittedAt'>
-  ): { success: boolean; application?: TutorApplication; error?: string } => {
-    // Check if user already has an active pending application
-    const existingPending = tutorApplications.find(
-      app =>
-        app.status === 'PENDING' &&
-        (app.applicantEmail.toLowerCase() === data.applicantEmail.toLowerCase() ||
-          (data.applicantUserId && app.applicantUserId === data.applicantUserId))
-    );
-
-    if (existingPending) {
-      return {
-        success: false,
-        error: 'You already have an application under review by LAU Administration. You will be notified once reviewed.',
-      };
-    }
-
-    const newApp: TutorApplication = {
-      ...data,
-      id: `app-${Date.now()}`,
-      status: 'PENDING',
-      submittedAt: new Date().toISOString(),
-    };
-
-    setTutorApplications(prev => [newApp, ...prev]);
-
-    // Send notification to Admin
-    addNotification({
-      recipientUserId: 'admin',
-      title: 'New Tutor Application Received',
-      message: `${newApp.applicantName} (${newApp.major}, ${newApp.campus}) submitted a tutor application for ${newApp.courses.map(c => c.courseCode).join(', ')}.`,
-      type: 'TUTOR_APPLICATION_SUBMITTED',
-      applicationId: newApp.id,
-    });
-
-    // Also notify the applicant that it was successfully submitted
-    if (newApp.applicantUserId) {
-      addNotification({
-        recipientUserId: newApp.applicantUserId,
-        title: 'Tutor Application Submitted',
-        message: 'Your tutor application has been received by LAU Administration. An academic coordinator will review your qualifications shortly.',
-        type: 'TUTOR_APPLICATION_SUBMITTED',
-        applicationId: newApp.id,
-      });
-    }
-
-    showToast('Application submitted! LAU Administration will review your profile shortly.');
-    return { success: true, application: newApp };
-  };
-
-  // Admin approves tutor application
-  const approveTutorApplication = (applicationId: string, adminNotes?: string) => {
-    const targetApp = tutorApplications.find(a => a.id === applicationId);
-    if (!targetApp) return;
-
-    const reviewedAt = new Date().toISOString();
-    const reviewerName = currentUser?.name || 'Dr. Mona Majdalani (Admin)';
-
-    // 1. Update application status
-    setTutorApplications(prev =>
-      prev.map(a =>
-        a.id === applicationId
-          ? {
-              ...a,
-              status: 'APPROVED',
-              reviewedAt,
-              adminReviewerName: reviewerName,
-              adminNotes: adminNotes || 'Approved for LAU Peer Tutoring Program',
-            }
-          : a
-      )
-    );
-
-    // 2. Provision or update TutorProfile
-    const newTutorId = `tutor-${Date.now()}`;
-    const newTutorProfile: TutorProfile = {
-      id: newTutorId,
-      fullName: targetApp.applicantName,
-      email: targetApp.applicantEmail,
-      campus: targetApp.campus,
-      school: targetApp.school,
-      major: targetApp.major,
-      academicYear: targetApp.academicYear,
-      bio: targetApp.bio,
-      hourlyRate: targetApp.hourlyRate,
-      rating: 5.0,
-      totalReviews: 0,
-      totalSessionsCompleted: 0,
-      isPeerCertified: true,
-      courses: targetApp.courses,
-      availability: targetApp.availability,
-      avatarUrl: targetApp.avatarUrl,
-    };
-
-    setTutors(prev => {
-      const existingIdx = prev.findIndex(t => t.email.toLowerCase() === targetApp.applicantEmail.toLowerCase());
-      if (existingIdx >= 0) {
-        const copy = [...prev];
-        copy[existingIdx] = { ...copy[existingIdx], ...newTutorProfile, id: copy[existingIdx].id };
-        return copy;
-      }
-      return [newTutorProfile, ...prev];
-    });
-
-    // 3. Update applicant user account to role 'tutor'
-    setAccounts(prev =>
-      prev.map(acc => {
-        if (
-          acc.id === targetApp.applicantUserId ||
-          acc.email.toLowerCase() === targetApp.applicantEmail.toLowerCase()
-        ) {
-          return {
-            ...acc,
-            role: 'tutor',
-            tutorProfileId: newTutorId,
-          };
-        }
-        return acc;
-      })
-    );
-
-    // If current logged-in user is this applicant, keep session in sync
-    if (
-      currentUser &&
-      (currentUser.id === targetApp.applicantUserId ||
-        currentUser.email.toLowerCase() === targetApp.applicantEmail.toLowerCase())
-    ) {
-      setCurrentUser(prev =>
-        prev
-          ? {
-              ...prev,
-              role: 'tutor',
-              tutorProfileId: newTutorId,
-            }
-          : null
-      );
-    }
-
-    // 4. Send approval notification to applicant
-    addNotification({
-      recipientUserId: targetApp.applicantUserId || targetApp.applicantEmail,
-      title: 'Tutor Application Approved! 🎉',
-      message: `Congratulations ${targetApp.applicantName}! Your application to become an LAU Peer Tutor has been approved by ${reviewerName}. Your profile is now live in the directory.`,
-      type: 'TUTOR_APPLICATION_APPROVED',
-      applicationId,
-    });
-
-    showToast(`Application for ${targetApp.applicantName} approved! Tutor profile is now active.`);
-  };
-
-  // Admin rejects tutor application
-  const rejectTutorApplication = (applicationId: string, reason?: string) => {
-    const targetApp = tutorApplications.find(a => a.id === applicationId);
-    if (!targetApp) return;
-
-    const reviewedAt = new Date().toISOString();
-    const reviewerName = currentUser?.name || 'Dr. Mona Majdalani (Admin)';
-
-    setTutorApplications(prev =>
-      prev.map(a =>
-        a.id === applicationId
-          ? {
-              ...a,
-              status: 'REJECTED',
-              reviewedAt,
-              adminReviewerName: reviewerName,
-              adminNotes: reason || 'Application did not meet departmental peer tutoring criteria at this time.',
-            }
-          : a
-      )
-    );
-
-    // Notify applicant
-    addNotification({
-      recipientUserId: targetApp.applicantUserId || targetApp.applicantEmail,
-      title: 'Tutor Application Status Update',
-      message: `Your application to become an LAU Peer Tutor was not approved by administration.${
-        reason ? ` Feedback: ${reason}` : ' Please consult the Academic Coordinator for further details.'
-      }`,
-      type: 'TUTOR_APPLICATION_REJECTED',
-      applicationId,
-    });
-
-    showToast(`Application for ${targetApp.applicantName} has been declined.`);
-  };
-
-  // Cross-window / cross-tab storage sync (allows testing on same machine across 2 browser windows/tabs in real-time)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      try {
-        if (e.key === STORAGE_KEYS.BOOKINGS && e.newValue) {
-          setBookings(JSON.parse(e.newValue));
-        }
-        if (e.key === STORAGE_KEYS.NOTIFICATIONS && e.newValue) {
-          setNotifications(JSON.parse(e.newValue));
-        }
-        if (e.key === STORAGE_KEYS.TUTORS && e.newValue) {
-          setTutors(JSON.parse(e.newValue));
-        }
-        if (e.key === STORAGE_KEYS.REVIEWS && e.newValue) {
-          setReviews(JSON.parse(e.newValue));
-        }
-        if (e.key === STORAGE_KEYS.ACCOUNTS && e.newValue) {
-          setAccounts(JSON.parse(e.newValue));
-        }
-        if (e.key === STORAGE_KEYS.APPLICATIONS && e.newValue) {
-          setTutorApplications(JSON.parse(e.newValue));
-        }
-      } catch {
-        // ignore parse errors
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  // Update user profile (picture, name, major, campus)
-  const updateUserProfile = (updates: {
-    name?: string;
-    avatarUrl?: string;
-    major?: string;
-    campus?: 'Beirut' | 'Byblos';
-  }) => {
+  // User Profile Update
+  const updateUserProfile = (updates: { name?: string; avatarUrl?: string; major?: string; campus?: 'Beirut' | 'Byblos' }) => {
     if (!currentUser) return;
 
     const updatedUser: UserAccount = {
       ...currentUser,
-      ...(updates.name ? { name: updates.name } : {}),
-      ...(updates.avatarUrl !== undefined ? { avatarUrl: updates.avatarUrl } : {}),
-      ...(updates.major ? { major: updates.major } : {}),
-      ...(updates.campus ? { campus: updates.campus } : {}),
+      ...updates,
     };
 
     setCurrentUser(updatedUser);
     setAccounts(prev => prev.map(a => (a.id === currentUser.id ? updatedUser : a)));
 
-    // If current user is also a registered tutor, sync tutor profile fields as well!
+    updateDoc(doc(db, 'accounts', currentUser.id), updates).catch(console.error);
+
     if (currentUser.tutorProfileId) {
       setTutors(prev =>
         prev.map(t =>
           t.id === currentUser.tutorProfileId
             ? {
                 ...t,
-                ...(updates.name ? { fullName: updates.name } : {}),
-                ...(updates.avatarUrl !== undefined ? { avatarUrl: updates.avatarUrl } : {}),
-                ...(updates.major ? { major: updates.major } : {}),
-                ...(updates.campus ? { campus: updates.campus } : {}),
+                fullName: updates.name || t.fullName,
+                avatarUrl: updates.avatarUrl !== undefined ? updates.avatarUrl : t.avatarUrl,
+                major: updates.major || t.major,
+                campus: updates.campus || t.campus,
               }
             : t
         )
       );
-    }
-
-    showToast('Profile and photo updated successfully!');
-  };
-
-  // Update tutor profile
-  const updateTutorProfile = (tutorId: string, updates: Partial<TutorProfile>) => {
-    setTutors(prev =>
-      prev.map(t => (t.id === tutorId ? { ...t, ...updates } : t))
-    );
-
-    // If current logged-in user is this tutor, keep user account in sync
-    if (currentUser && currentUser.tutorProfileId === tutorId) {
-      const updatedUser: UserAccount = {
-        ...currentUser,
-        ...(updates.fullName ? { name: updates.fullName } : {}),
+      updateDoc(doc(db, 'tutors', currentUser.tutorProfileId), {
+        ...(updates.name ? { fullName: updates.name } : {}),
         ...(updates.avatarUrl !== undefined ? { avatarUrl: updates.avatarUrl } : {}),
         ...(updates.major ? { major: updates.major } : {}),
-        ...(updates.campus && updates.campus !== 'Both' ? { campus: updates.campus } : {}),
+        ...(updates.campus ? { campus: updates.campus } : {}),
+      }).catch(console.error);
+    }
+
+    showToast('Your profile has been saved.');
+  };
+
+  // Create Booking
+  const createBooking = (bookingData: Omit<Booking, 'id' | 'createdAt' | 'status'>) => {
+    const newId = `book-${Date.now()}`;
+    const newBooking: Booking = {
+      ...bookingData,
+      id: newId,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+
+    setBookings(prev => [newBooking, ...prev]);
+    setDoc(doc(db, 'bookings', newId), newBooking).catch(console.error);
+
+    addNotification({
+      recipientUserId: bookingData.tutorId,
+      title: 'New Session Request Received!',
+      message: `${bookingData.studentName} requested a session for ${bookingData.courseCode} on ${bookingData.date} (${bookingData.timeSlot}).`,
+      type: 'BOOKING_REQUEST',
+      bookingId: newId,
+    });
+
+    showToast(`Request sent to ${bookingData.tutorName}! Session pending confirmation.`);
+    return { success: true, booking: newBooking };
+  };
+
+  // Update Booking Status
+  const updateBookingStatus = (bookingId: string, status: BookingStatus, declineReason?: string) => {
+    setBookings(prev =>
+      prev.map(b => (b.id === bookingId ? { ...b, status, cancellationReason: declineReason } : b))
+    );
+
+    updateDoc(doc(db, 'bookings', bookingId), {
+      status,
+      ...(declineReason ? { cancellationReason: declineReason } : {}),
+    }).catch(console.error);
+
+    const target = bookings.find(b => b.id === bookingId);
+    if (target) {
+      if (status === 'CONFIRMED') {
+        addNotification({
+          recipientUserId: target.studentId,
+          title: 'Session Confirmed!',
+          message: `${target.tutorName} has confirmed your peer tutoring session for ${target.courseCode}.`,
+          type: 'BOOKING_CONFIRMED',
+          bookingId,
+        });
+        showToast(`Session for ${target.courseCode} confirmed!`);
+      } else if (status === 'CANCELLED') {
+        addNotification({
+          recipientUserId: target.studentId,
+          title: 'Session Declined',
+          message: `${target.tutorName} was unable to accept your request. Reason: ${declineReason || 'Schedule conflict'}.`,
+          type: 'BOOKING_CANCELLED',
+          bookingId,
+        });
+        showToast('Session request declined.');
+      } else if (status === 'COMPLETED') {
+        addNotification({
+          recipientUserId: target.studentId,
+          title: 'Session Completed — Leave a Review',
+          message: `Your tutoring session with ${target.tutorName} is complete. Rate your experience!`,
+          type: 'SESSION_COMPLETED',
+          bookingId,
+        });
+        showToast('Session marked as completed.');
+      }
+    }
+  };
+
+  // Cancel Booking
+  const cancelBooking = (bookingId: string, reason?: string) => {
+    setBookings(prev =>
+      prev.map(b => (b.id === bookingId ? { ...b, status: 'CANCELLED', cancellationReason: reason } : b))
+    );
+
+    updateDoc(doc(db, 'bookings', bookingId), {
+      status: 'CANCELLED',
+      cancellationReason: reason || 'Cancelled by student',
+    }).catch(console.error);
+
+    showToast('Session has been cancelled.');
+  };
+
+  // Add Review
+  const addReview = (reviewData: Omit<Review, 'id' | 'date'>) => {
+    const newId = `rev-${Date.now()}`;
+    const newRev: Review = {
+      ...reviewData,
+      id: newId,
+      date: new Date().toISOString().split('T')[0],
+    };
+
+    setReviews(prev => [newRev, ...prev]);
+    setDoc(doc(db, 'reviews', newId), newRev).catch(console.error);
+
+    const tutorToUpdate = tutors.find(t => t.id === reviewData.tutorId);
+    if (tutorToUpdate) {
+      const existingReviews = reviews.filter(r => r.tutorId === reviewData.tutorId);
+      const allRatings = [...existingReviews.map(r => r.rating), reviewData.rating];
+      const avg = allRatings.reduce((sum, val) => sum + val, 0) / allRatings.length;
+      const updatedTutor = {
+        ...tutorToUpdate,
+        rating: Math.round(avg * 10) / 10,
+        totalReviews: allRatings.length,
+      };
+      setTutors(prev => prev.map(t => (t.id === reviewData.tutorId ? updatedTutor : t)));
+      updateDoc(doc(db, 'tutors', reviewData.tutorId), {
+        rating: Math.round(avg * 10) / 10,
+        totalReviews: allRatings.length,
+      }).catch(console.error);
+    }
+
+    showToast('Thank you for your review! Your feedback helps peer tutors improve.');
+  };
+
+  // Add Tutor Feedback
+  const addTutorFeedback = (bookingId: string, feedback: string) => {
+    setBookings(prev =>
+      prev.map(b => (b.id === bookingId ? { ...b, tutorFeedback: feedback } : b))
+    );
+    updateDoc(doc(db, 'bookings', bookingId), {
+      tutorFeedback: feedback,
+    }).catch(console.error);
+
+    const b = bookings.find(item => item.id === bookingId);
+    if (b) {
+      addNotification({
+        recipientUserId: b.studentId,
+        title: 'Tutor Feedback Received',
+        message: `${b.tutorName} provided learning notes on your ${b.courseCode} session.`,
+        type: 'TUTOR_FEEDBACK',
+        bookingId,
+      });
+    }
+    showToast('Session feedback & study notes saved for the student.');
+  };
+
+  // Register Tutor
+  const registerTutor = (newTutorData: Omit<TutorProfile, 'id' | 'rating' | 'totalReviews' | 'totalSessionsCompleted'>): TutorProfile => {
+    const newId = `tutor-${Date.now()}`;
+    const newTutor: TutorProfile = {
+      ...newTutorData,
+      id: newId,
+      rating: 5.0,
+      totalReviews: 0,
+      totalSessionsCompleted: 0,
+      isPeerCertified: true,
+    };
+
+    setTutors(prev => [newTutor, ...prev]);
+    setDoc(doc(db, 'tutors', newId), newTutor).catch(console.error);
+
+    if (currentUser) {
+      const updatedUser: UserAccount = {
+        ...currentUser,
+        role: 'tutor',
+        tutorProfileId: newId,
       };
       setCurrentUser(updatedUser);
       setAccounts(prev => prev.map(a => (a.id === currentUser.id ? updatedUser : a)));
+      updateDoc(doc(db, 'accounts', currentUser.id), {
+        role: 'tutor',
+        tutorProfileId: newId,
+      }).catch(console.error);
+    }
+
+    showToast(`Welcome to the peer tutor team, ${newTutor.fullName}! Your profile is now published.`);
+    return newTutor;
+  };
+
+  // Update Tutor Profile
+  const updateTutorProfile = (tutorId: string, updates: Partial<TutorProfile>) => {
+    setTutors(prev => prev.map(t => (t.id === tutorId ? { ...t, ...updates } : t)));
+    updateDoc(doc(db, 'tutors', tutorId), updates).catch(console.error);
+
+    if (currentUser && currentUser.tutorProfileId === tutorId) {
+      const updatedUser: UserAccount = {
+        ...currentUser,
+        name: updates.fullName || currentUser.name,
+        major: updates.major || currentUser.major,
+        campus: (updates.campus === 'Both' ? 'Beirut' : updates.campus) || currentUser.campus,
+        avatarUrl: updates.avatarUrl !== undefined ? updates.avatarUrl : currentUser.avatarUrl,
+      };
+      setCurrentUser(updatedUser);
+      setAccounts(prev => prev.map(a => (a.id === currentUser.id ? updatedUser : a)));
+      updateDoc(doc(db, 'accounts', currentUser.id), {
+        name: updatedUser.name,
+        major: updatedUser.major,
+        campus: updatedUser.campus,
+        avatarUrl: updatedUser.avatarUrl,
+      }).catch(console.error);
     }
 
     showToast('Tutor profile & availability updated successfully.');
   };
 
-  // Reset demo data
-  const resetDemoData = () => {
-    localStorage.removeItem(STORAGE_KEYS.TUTORS);
-    localStorage.removeItem(STORAGE_KEYS.BOOKINGS);
-    localStorage.removeItem(STORAGE_KEYS.REVIEWS);
-    localStorage.removeItem(STORAGE_KEYS.ACCOUNTS);
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
-    localStorage.removeItem(STORAGE_KEYS.APPLICATIONS);
-    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+  // Submit Tutor Application
+  const submitTutorApplication = (appData: Omit<TutorApplication, 'id' | 'status' | 'submittedAt'>) => {
+    const newId = `app-${Date.now()}`;
+    const newApplication: TutorApplication = {
+      ...appData,
+      id: newId,
+      status: 'PENDING',
+      submittedAt: new Date().toISOString(),
+    };
 
-    setAccounts(INITIAL_ACCOUNTS);
-    setCurrentUser(null);
-    setTutors(INITIAL_TUTORS);
-    setBookings(INITIAL_BOOKINGS);
-    setReviews(INITIAL_REVIEWS);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setTutorApplications(INITIAL_APPLICATIONS);
+    setTutorApplications(prev => [newApplication, ...prev]);
+    setDoc(doc(db, 'applications', newId), newApplication).catch(console.error);
 
-    showToast('Application data reset to clean initial baseline.');
+    addNotification({
+      recipientUserId: 'admin',
+      title: 'New Tutor Application Received',
+      message: `${appData.applicantName} (${appData.major}) submitted a peer tutor application for review.`,
+      type: 'TUTOR_APPLICATION_SUBMITTED',
+      applicationId: newId,
+    });
+
+    showToast('Application submitted! LAU Academic Administration will review your credentials.');
+    return { success: true, application: newApplication };
+  };
+
+  // Approve Tutor Application
+  const approveTutorApplication = (applicationId: string, adminNotes?: string) => {
+    const app = tutorApplications.find(a => a.id === applicationId);
+    if (!app) return;
+
+    const reviewedAt = new Date().toISOString();
+    setTutorApplications(prev =>
+      prev.map(a =>
+        a.id === applicationId
+          ? {
+              ...a,
+              status: 'APPROVED',
+              adminNotes,
+              adminReviewerName: currentUser?.name || 'Dr. Mona Majdalani',
+              reviewedAt,
+            }
+          : a
+      )
+    );
+
+    updateDoc(doc(db, 'applications', applicationId), {
+      status: 'APPROVED',
+      adminNotes: adminNotes || 'Approved for LAU Peer Tutoring Program.',
+      adminReviewerName: currentUser?.name || 'Dr. Mona Majdalani',
+      reviewedAt,
+    }).catch(console.error);
+
+    const newTutorId = `tutor-${app.applicantUserId || 'applicant'}-${Date.now()}`;
+    const newTutorProfile: TutorProfile = {
+      id: newTutorId,
+      fullName: app.applicantName,
+      email: app.applicantEmail,
+      campus: app.campus,
+      school: app.school,
+      major: app.major,
+      academicYear: app.academicYear,
+      bio: app.bio,
+      hourlyRate: app.hourlyRate,
+      rating: 5.0,
+      totalReviews: 0,
+      totalSessionsCompleted: 0,
+      isPeerCertified: true,
+      avatarUrl: app.avatarUrl,
+      courses: app.courses.map(c => ({
+        courseId: c.courseId,
+        courseCode: c.courseCode,
+        courseName: c.courseName,
+        gradeAchieved: c.gradeAchieved,
+      })),
+      availability: app.availability || [],
+    };
+
+    setTutors(prev => [newTutorProfile, ...prev.filter(t => t.email !== app.applicantEmail)]);
+    setDoc(doc(db, 'tutors', newTutorId), newTutorProfile).catch(console.error);
+
+    setAccounts(prev =>
+      prev.map(acc =>
+        (app.applicantUserId && acc.id === app.applicantUserId) || acc.email.toLowerCase() === app.applicantEmail.toLowerCase()
+          ? { ...acc, role: 'tutor', tutorProfileId: newTutorId }
+          : acc
+      )
+    );
+    const matchedAcc = accounts.find(
+      acc => (app.applicantUserId && acc.id === app.applicantUserId) || acc.email.toLowerCase() === app.applicantEmail.toLowerCase()
+    );
+    if (matchedAcc) {
+      updateDoc(doc(db, 'accounts', matchedAcc.id), {
+        role: 'tutor',
+        tutorProfileId: newTutorId,
+      }).catch(console.error);
+    }
+
+    addNotification({
+      recipientUserId: app.applicantUserId || app.applicantEmail,
+      title: 'Congratulations! Your Tutor Application is Approved',
+      message: `Your application to tutor at LAU has been certified by ${currentUser?.name || 'Academic Administration'}. Welcome to the Peer Tutor network!`,
+      type: 'TUTOR_APPLICATION_APPROVED',
+      applicationId,
+    });
+
+    showToast(`Approved ${app.applicantName}! Their tutor profile is now live in the directory.`);
+  };
+
+  // Reject Tutor Application
+  const rejectTutorApplication = (applicationId: string, reason?: string) => {
+    const app = tutorApplications.find(a => a.id === applicationId);
+    if (!app) return;
+
+    const reviewedAt = new Date().toISOString();
+    setTutorApplications(prev =>
+      prev.map(a =>
+        a.id === applicationId
+          ? {
+              ...a,
+              status: 'REJECTED',
+              adminNotes: reason,
+              adminReviewerName: currentUser?.name || 'Dr. Mona Majdalani',
+              reviewedAt,
+            }
+          : a
+      )
+    );
+
+    updateDoc(doc(db, 'applications', applicationId), {
+      status: 'REJECTED',
+      adminNotes: reason || 'Application declined by academic administration.',
+      adminReviewerName: currentUser?.name || 'Dr. Mona Majdalani',
+      reviewedAt,
+    }).catch(console.error);
+
+    addNotification({
+      recipientUserId: app.applicantUserId || app.applicantEmail,
+      title: 'Tutor Application Decision',
+      message: `Your tutor application was not approved at this time. Feedback: ${reason || 'Prerequisite requirements not met'}.`,
+      type: 'TUTOR_APPLICATION_REJECTED',
+      applicationId,
+    });
+
+    showToast(`Declined application for ${app.applicantName}.`);
+  };
+
+  // Reset Demo Data (ADMIN USER ONLY)
+  const resetDemoData = async () => {
+    if (currentUser?.role !== 'admin') {
+      showToast('Restricted: Only administrators can reset demo data.');
+      return;
+    }
+
+    try {
+      showToast('Resetting Firebase database to clean demo baseline...');
+
+      const resetCollection = async (collName: string, items: any[]) => {
+        const snap = await getDocs(collection(db, collName));
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        items.forEach(item => batch.set(doc(db, collName, item.id), item));
+        await batch.commit();
+      };
+
+      await Promise.all([
+        resetCollection('tutors', INITIAL_TUTORS),
+        resetCollection('bookings', INITIAL_BOOKINGS),
+        resetCollection('reviews', INITIAL_REVIEWS),
+        resetCollection('accounts', INITIAL_ACCOUNTS),
+        resetCollection('applications', INITIAL_APPLICATIONS),
+        resetCollection('notifications', INITIAL_NOTIFICATIONS),
+      ]);
+
+      // Immediate state sync
+      setTutors(INITIAL_TUTORS);
+      setBookings(INITIAL_BOOKINGS);
+      setReviews(INITIAL_REVIEWS);
+      setAccounts(INITIAL_ACCOUNTS);
+      setTutorApplications(INITIAL_APPLICATIONS);
+      setNotifications(INITIAL_NOTIFICATIONS);
+
+      showToast('Firebase database successfully reset to clean demo baseline!');
+    } catch (err) {
+      console.error('Error resetting Firebase demo data:', err);
+      // Fallback local reset
+      setAccounts(INITIAL_ACCOUNTS);
+      setTutors(INITIAL_TUTORS);
+      setBookings(INITIAL_BOOKINGS);
+      setReviews(INITIAL_REVIEWS);
+      setNotifications(INITIAL_NOTIFICATIONS);
+      setTutorApplications(INITIAL_APPLICATIONS);
+      showToast('Reset local data cache to clean demo baseline.');
+    }
   };
 
   // Helper getters
@@ -966,6 +928,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getBookingsForStudent = (studentId: string) =>
     bookings.filter(b => b.studentId === studentId || (currentUser && b.studentEmail === currentUser.email));
   const getBookingsForTutor = (tutorId: string) => bookings.filter(b => b.tutorId === tutorId);
+
+  const isSlotAlreadyBooked = (tutorId: string, date: string, timeSlot: string) => {
+    return bookings.some(
+      b =>
+        b.tutorId === tutorId &&
+        b.date === date &&
+        b.timeSlot === timeSlot &&
+        (b.status === 'CONFIRMED' || b.status === 'PENDING')
+    );
+  };
 
   return (
     <DataContext.Provider
@@ -1001,14 +973,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSlotAlreadyBooked,
         toastMessage,
         showToast,
-        notifications,
-        markNotificationAsRead,
-        markAllNotificationsAsRead,
-        addNotification,
         tutorApplications,
         submitTutorApplication,
         approveTutorApplication,
         rejectTutorApplication,
+        notifications,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        addNotification,
+        isFirebaseConnected,
       }}
     >
       {children}

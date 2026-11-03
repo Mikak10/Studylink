@@ -81,6 +81,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onSelect
         return <FileText className="w-4 h-4 text-purple-600" />;
       case 'REVIEW_RECEIVED':
         return <Star className="w-4 h-4 text-amber-400" />;
+      case 'TUTOR_APPLICATION_SUBMITTED':
+        return <Clock className="w-4 h-4 text-amber-500" />;
+      case 'TUTOR_APPLICATION_APPROVED':
+        return <CheckCircle2 className="w-4 h-4 text-emerald-600" />;
+      case 'TUTOR_APPLICATION_REJECTED':
+        return <XCircle className="w-4 h-4 text-rose-500" />;
       default:
         return <Bell className="w-4 h-4 text-slate-500" />;
     }

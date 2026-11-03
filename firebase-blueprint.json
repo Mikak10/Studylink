@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "Tutor": {
+      "title": "Tutor",
+      "description": "Peer tutor profile in the directory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "campus": { "type": "string", "enum": ["Beirut", "Byblos", "Both"] },
+        "school": { "type": "string" },
+        "major": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "bio": { "type": "string" },
+        "hourlyRate": { "type": "number" },
+        "rating": { "type": "number" },
+        "totalReviews": { "type": "number" },
+        "totalSessionsCompleted": { "type": "number" },
+        "isPeerCertified": { "type": "boolean" },
+        "avatarUrl": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email", "campus", "major"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Tutoring session booking record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tutorId": { "type": "string" },
+        "tutorName": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "studentMajor": { "type": "string" },
+        "courseCode": { "type": "string" },
+        "courseName": { "type": "string" },
+        "campus": { "type": "string" },
+        "date": { "type": "string" },
+        "timeSlot": { "type": "string" },
+        "format": { "type": "string", "enum": ["In-Person", "Online"] },
+        "locationDetails": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] },
+        "studentNote": { "type": "string" },
+        "tutorFeedback": { "type": "string" },
+        "cancellationReason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tutorId", "studentId", "courseCode", "date", "timeSlot", "status"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Student peer review for completed session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "tutorId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "courseCode": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "bookingId", "tutorId", "rating", "comment"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "User account for authentication and roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "tutor", "admin"] },
+        "campus": { "type": "string" },
+        "major": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "tutorProfileId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "email", "name", "role"]
+    },
+    "TutorApplication": {
+      "title": "TutorApplication",
+      "description": "Student application to become an LAU peer tutor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "applicantUserId": { "type": "string" },
+        "applicantName": { "type": "string" },
+        "applicantEmail": { "type": "string" },
+        "campus": { "type": "string" },
+        "school": { "type": "string" },
+        "major": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "gpa": { "type": "string" },
+        "bio": { "type": "string" },
+        "hourlyRate": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNotes": { "type": "string" },
+        "adminReviewerName": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "reviewedAt": { "type": "string" }
+      },
+      "required": ["id", "applicantUserId", "applicantName", "applicantEmail", "status"]
+    }
+  },
+  "firestore": {
+    "/tutors/{tutorId}": {
+      "schema": { "$ref": "#/entities/Tutor" },
+      "description": "Public directory of verified peer tutors"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Session bookings between students and tutors"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Student reviews and ratings for tutors"
+    },
+    "/accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Account" },
+      "description": "User accounts with roles (student, tutor, admin)"
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/TutorApplication" },
+      "description": "Tutor application submissions reviewed by administrators"
+    }
+  }
+}
