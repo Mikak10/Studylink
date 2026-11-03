@@ -247,7 +247,15 @@ export const TutorProfileModal: React.FC<TutorProfileModalProps> = ({
             >
               Close
             </button>
-            {isSelf ? (
+            {!currentUser ? (
+              <button
+                disabled
+                className="px-5 py-2 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed opacity-80"
+                title="Please sign in with your student account to book a tutoring session"
+              >
+                Sign in to Book Slot
+              </button>
+            ) : isSelf ? (
               <button
                 disabled
                 className="px-5 py-2 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed"

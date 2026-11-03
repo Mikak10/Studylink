@@ -159,7 +159,15 @@ export const TutorCard: React.FC<TutorCardProps> = ({
           >
             Profile
           </button>
-          {isSelf ? (
+          {!currentUser ? (
+            <button
+              disabled
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed opacity-80"
+              title="Sign in with your student account to book a tutoring slot"
+            >
+              Book Slot
+            </button>
+          ) : isSelf ? (
             <button
               disabled
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed"

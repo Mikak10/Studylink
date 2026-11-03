@@ -60,12 +60,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     activePersona.id === tutor.id
   );
 
+  const isNotSignedIn = !currentUser;
+
   // Real-time conflict detection
   const hasConflict = isSlotAlreadyBooked(tutor.id, selectedDate, selectedSlot);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
+
+    if (isNotSignedIn) {
+      setValidationError('You must be signed in with your LAU student account to book a tutoring session.');
+      return;
+    }
 
     if (isSelfBooking) {
       setValidationError('You cannot book a tutoring session with yourself. As an LAU tutor, you can request peer tutoring sessions with any other tutor on the platform.');
@@ -385,15 +392,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={hasConflict || isSelfBooking}
+              disabled={hasConflict || isSelfBooking || isNotSignedIn}
               className={`px-5 py-2 text-xs font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 ${
-                hasConflict || isSelfBooking
+                hasConflict || isSelfBooking || isNotSignedIn
                   ? 'bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300'
                   : 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              {isSelfBooking
+              {isNotSignedIn
+                ? 'Sign In Required to Book'
+                : isSelfBooking
                 ? 'Cannot Book Yourself'
                 : hasConflict
                 ? 'Slot Booked — Choose Another'
