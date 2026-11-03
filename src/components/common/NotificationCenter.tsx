@@ -61,7 +61,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onSelect
     if (!n.read) {
       markNotificationAsRead(n.id);
     }
-    if (n.bookingId && onSelectBooking) {
+    if (n.bookingId && onSelectBooking && currentUser?.role !== 'admin') {
       onSelectBooking(n.bookingId);
       setIsOpen(false);
     }
@@ -166,7 +166,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onSelect
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
                       <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-                      {item.bookingId && (
+                      {item.bookingId && currentUser?.role !== 'admin' && (
                         <span className="text-emerald-700 font-semibold underline">
                           View Session Details →
                         </span>

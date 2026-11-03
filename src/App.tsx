@@ -22,7 +22,17 @@ function MainAppContent() {
   const { toastMessage, currentUser, activePersona, bookings, updateBookingStatus } = useStudyLinkData();
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'find' | 'sessions' | 'dashboard' | 'become-tutor' | 'admin'>('find');
+  const [activeTab, setActiveTab] = useState<'find' | 'sessions' | 'dashboard' | 'become-tutor' | 'admin'>(() => {
+    try {
+      const saved = localStorage.getItem('lausl_current_user_v2');
+      if (saved) {
+        const user = JSON.parse(saved);
+        if (user?.role === 'admin') return 'admin';
+        if (user?.role === 'tutor') return 'dashboard';
+      }
+    } catch {}
+    return 'find';
+  });
 
   // Modals state
   const [selectedTutorForProfile, setSelectedTutorForProfile] = useState<TutorProfile | null>(null);
@@ -44,7 +54,8 @@ function MainAppContent() {
     }
 
     if (currentUser.role === 'admin') {
-      if (activeTab === 'dashboard') {
+      // Administrator role is strictly dedicated to Tutor Approvals only
+      if (activeTab !== 'admin') {
         setActiveTab('admin');
       }
     } else if (currentUser.role === 'tutor') {
@@ -57,7 +68,7 @@ function MainAppContent() {
         setActiveTab('find');
       }
     }
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, activeTab]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 selection:bg-emerald-100 selection:text-emerald-900">
@@ -75,7 +86,7 @@ function MainAppContent() {
 
       {/* 3. Main Dynamic View Container */}
       <div className="flex-1">
-        {activeTab === 'find' && (
+        {activeTab === 'find' && currentUser?.role !== 'admin' && (
           <TutorDirectory
             onViewProfile={tutor => setSelectedTutorForProfile(tutor)}
             onRequestBooking={tutor => setSelectedTutorForBooking(tutor)}
@@ -83,7 +94,7 @@ function MainAppContent() {
           />
         )}
 
-        {activeTab === 'sessions' && (
+        {activeTab === 'sessions' && currentUser?.role !== 'admin' && (
           <MySessionsView
             onBrowseTutors={() => setActiveTab('find')}
             onOpenReviewModal={booking => setSelectedBookingForReview(booking)}
@@ -111,12 +122,14 @@ function MainAppContent() {
               This dashboard is restricted to verified LAU Peer Tutors. If you are an enrolled student, you can apply to tutor courses you have excelled in.
             </p>
             <div className="flex items-center justify-center gap-2.5">
-              <button
-                onClick={() => setIsRegisterModalOpen(true)}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
-              >
-                Apply as Peer Tutor
-              </button>
+              {currentUser?.role === 'student' && (
+                <button
+                  onClick={() => setIsRegisterModalOpen(true)}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                >
+                  Apply as Peer Tutor
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('find')}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"

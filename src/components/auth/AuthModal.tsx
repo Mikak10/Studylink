@@ -213,6 +213,48 @@ export const AuthModal: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
+              {/* Fast 1-Click Demo Login Shortcuts */}
+              <div className="pt-3 border-t border-slate-100">
+                <span className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                  Demo Quick Login:
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentifier('admin');
+                      setLoginPassword('password123');
+                    }}
+                    className="p-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold text-[10px] text-center transition-colors cursor-pointer"
+                    title="Sign in as Admin (Approval portal only)"
+                  >
+                    Dr. Mona (Admin)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentifier('sami');
+                      setLoginPassword('password123');
+                    }}
+                    className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-[10px] text-center transition-colors cursor-pointer"
+                    title="Sign in as Student"
+                  >
+                    Sami (Student)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginIdentifier('nour');
+                      setLoginPassword('password123');
+                    }}
+                    className="p-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-[10px] text-center transition-colors cursor-pointer"
+                    title="Sign in as Peer Tutor"
+                  >
+                    Nour (Tutor)
+                  </button>
+                </div>
+              </div>
+
               <div className="text-center pt-2">
                 <span className="text-slate-500 text-[11px]">Don&apos;t have an account yet? </span>
                 <button

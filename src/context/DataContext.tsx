@@ -504,7 +504,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       bookingId: newBooking.id,
     });
 
-    showToast(`Session request sent to ${bookingData.tutorName}! It is now pending approval.`);
+    // Send notification to the student confirming request was placed
+    const studentRecipientId = currentUser?.id || currentUser?.username || bookingData.studentId;
+    addNotification({
+      recipientUserId: studentRecipientId,
+      title: 'Booking Request Submitted',
+      message: `Your session request for ${bookingData.courseCode} with ${bookingData.tutorName} on ${bookingData.date} (${bookingData.timeSlot}) has been submitted! Waiting for tutor confirmation.`,
+      type: 'BOOKING_REQUEST',
+      bookingId: newBooking.id,
+    });
+
+    showToast(`Booking request submitted! Waiting for ${bookingData.tutorName} to confirm.`);
     return { success: true, booking: newBooking };
   };
 

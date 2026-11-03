@@ -31,6 +31,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   );
   const completedCount = studentPastSessions.filter(b => b.status === 'COMPLETED').length;
 
+  const [isConfirmingDecline, setIsConfirmingDecline] = React.useState(false);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
@@ -141,22 +143,54 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               {completedCount} sessions
             </span>
           </div>
+
+          {/* Inline Decline Confirmation Warning */}
+          {isConfirmingDecline && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-2 animate-in fade-in">
+              <p className="font-bold text-rose-950">
+                Are you sure you want to decline this session request?
+              </p>
+              <p className="text-[11px] text-rose-800 leading-relaxed">
+                The student ({booking.studentName}) will be notified and this time slot will be released back to the schedule.
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDecline(false)}
+                  className="px-2.5 py-1 text-slate-600 hover:text-slate-800 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDecline?.(booking.id);
+                    onClose();
+                  }}
+                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold shadow-2xs cursor-pointer"
+                >
+                  Yes, Decline Request
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Actions Footer */}
         {booking.status === 'PENDING' && onAccept && onDecline ? (
           <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2.5">
+            {!isConfirmingDecline && (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDecline(true)}
+                className="px-3.5 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer text-xs"
+              >
+                <XCircle className="w-4 h-4" />
+                Decline Request
+              </button>
+            )}
             <button
-              onClick={() => {
-                onDecline(booking.id);
-                onClose();
-              }}
-              className="px-3.5 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer text-xs"
-            >
-              <XCircle className="w-4 h-4" />
-              Decline Request
-            </button>
-            <button
+              type="button"
               onClick={() => {
                 onAccept(booking.id);
                 onClose();

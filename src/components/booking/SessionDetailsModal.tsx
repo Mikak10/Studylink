@@ -45,6 +45,7 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
   const [showTutorFeedbackForm, setShowTutorFeedbackForm] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [showDeclineInput, setShowDeclineInput] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   if (!booking) return null;
 
@@ -338,8 +339,17 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
 
           {/* Decline Reason Input if active */}
           {showDeclineInput && (
-            <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-2 animate-in fade-in">
-              <label className="block font-bold text-rose-900 text-xs">
+            <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 space-y-2.5 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-bold text-rose-950 text-xs">
+                  Are you sure you want to decline this session request?
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-800 leading-relaxed">
+                The student ({booking.studentName}) will be notified and this reserved slot will be released back to the directory.
+              </p>
+              <label className="block font-semibold text-rose-900 text-[11px]">
                 Reason for Declining (Optional):
               </label>
               <input
@@ -349,20 +359,50 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
                 placeholder="e.g. Schedule conflict with midterm exam..."
                 className="w-full p-2 bg-white border border-rose-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-rose-500"
               />
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowDeclineInput(false)}
-                  className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-semibold cursor-pointer"
                 >
-                  Cancel
+                  Keep Request
                 </button>
                 <button
                   type="button"
                   onClick={handleDecline}
-                  className="px-3 py-1 text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg shadow-2xs cursor-pointer"
                 >
-                  Confirm Decline
+                  Yes, Decline Request
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showCancelConfirm && (
+            <div className="p-3.5 bg-rose-50 rounded-xl border border-rose-200 space-y-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-bold text-rose-950 text-xs">
+                  Are you sure you want to cancel this booking request?
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-800 leading-relaxed">
+                Your request to study with {booking.tutorName} will be withdrawn and the slot released.
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelConfirm(false)}
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-semibold cursor-pointer"
+                >
+                  Keep Request
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelRequest}
+                  className="px-3.5 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg shadow-2xs cursor-pointer"
+                >
+                  Yes, Cancel Request
                 </button>
               </div>
             </div>
@@ -388,13 +428,15 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
             {/* Tutor Actions */}
             {isTutorViewing && isPending && (
               <>
-                <button
-                  onClick={() => setShowDeclineInput(true)}
-                  className="px-3 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Decline
-                </button>
+                {!showDeclineInput && (
+                  <button
+                    onClick={() => setShowDeclineInput(true)}
+                    className="px-3 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Decline
+                  </button>
+                )}
                 <button
                   onClick={handleApprove}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold flex items-center gap-1 cursor-pointer shadow-xs"
@@ -417,13 +459,17 @@ export const SessionDetailsModal: React.FC<SessionDetailsModalProps> = ({
 
             {/* Student Actions */}
             {isStudentViewing && isPending && (
-              <button
-                onClick={handleCancelRequest}
-                className="px-3 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <XCircle className="w-4 h-4" />
-                Cancel Request
-              </button>
+              <>
+                {!showCancelConfirm && (
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="px-3 py-2 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancel Request
+                  </button>
+                )}
+              </>
             )}
 
             {isStudentViewing && isCompleted && !booking.reviewSubmitted && onOpenReviewModal && (

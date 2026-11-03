@@ -73,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => {
-              setActiveTab('find');
+              setActiveTab(currentUser?.role === 'admin' ? 'admin' : 'find');
               setIsMobileMenuOpen(false);
             }}
             className="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer"
@@ -89,22 +89,24 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* ROLE-BASED NAVIGATION LINKS                                               */}
         {/* ========================================================================= */}
         <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-medium text-slate-600">
-          {/* Find a Tutor - Visible to Everyone */}
-          <button
-            onClick={() => setActiveTab('find')}
-            className={`flex items-center gap-1.5 transition-colors whitespace-nowrap py-1 relative cursor-pointer ${
-              activeTab === 'find' ? 'text-emerald-800 font-bold' : 'hover:text-slate-900'
-            }`}
-          >
-            <Compass className="w-4 h-4 text-emerald-700" />
-            Find a Tutor
-            {activeTab === 'find' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-700 rounded-full" />
-            )}
-          </button>
+          {/* Find a Tutor - Visible to Everyone EXCEPT Admin */}
+          {currentUser?.role !== 'admin' && (
+            <button
+              onClick={() => setActiveTab('find')}
+              className={`flex items-center gap-1.5 transition-colors whitespace-nowrap py-1 relative cursor-pointer ${
+                activeTab === 'find' ? 'text-emerald-800 font-bold' : 'hover:text-slate-900'
+              }`}
+            >
+              <Compass className="w-4 h-4 text-emerald-700" />
+              Find a Tutor
+              {activeTab === 'find' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-700 rounded-full" />
+              )}
+            </button>
+          )}
 
-          {/* My Sessions - Visible to Logged-in Users */}
-          {currentUser && (
+          {/* My Sessions - Visible to Students & Tutors (NOT Admin) */}
+          {currentUser && currentUser.role !== 'admin' && (
             <button
               onClick={() => setActiveTab('sessions')}
               className={`flex items-center gap-1.5 transition-colors whitespace-nowrap py-1 relative cursor-pointer ${
@@ -145,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Admin Portal - ONLY Visible to Administrators */}
+          {/* Tutor Approvals - ONLY Visible to Administrators */}
           {currentUser?.role === 'admin' && (
             <button
               onClick={() => setActiveTab('admin')}
@@ -154,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <ShieldCheck className="w-4 h-4 text-emerald-700" />
-              Admin Portal
+              Tutor Approvals
               {pendingAdminCount > 0 && (
                 <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[11px] font-bold rounded-full font-mono">
                   {pendingAdminCount} pending
@@ -166,8 +168,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Apply to Tutor - Visible to Students & Guests */}
-          {(!currentUser || currentUser.role === 'student') && (
+          {/* Apply to Tutor - ONLY Visible to Signed-in Students */}
+          {currentUser?.role === 'student' && (
             <button
               onClick={onOpenRegisterModal}
               className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors cursor-pointer"
@@ -262,22 +264,24 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Responsive Mobile Drawer */}
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-4 space-y-2 text-xs">
-          <button
-            onClick={() => {
-              setActiveTab('find');
-              setIsMobileMenuOpen(false);
-            }}
-            className={`w-full flex items-center justify-between p-2.5 rounded-lg font-semibold ${
-              activeTab === 'find' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <Compass className="w-4 h-4 text-emerald-700" />
-              Find a Tutor
-            </span>
-          </button>
+          {currentUser?.role !== 'admin' && (
+            <button
+              onClick={() => {
+                setActiveTab('find');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between p-2.5 rounded-lg font-semibold ${
+                activeTab === 'find' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Compass className="w-4 h-4 text-emerald-700" />
+                Find a Tutor
+              </span>
+            </button>
+          )}
 
-          {currentUser && (
+          {currentUser && currentUser.role !== 'admin' && (
             <button
               onClick={() => {
                 setActiveTab('sessions');
@@ -333,7 +337,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <span className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                Admin Portal
+                Tutor Approvals
               </span>
               {pendingAdminCount > 0 && (
                 <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full font-mono text-[11px]">
@@ -343,7 +347,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {(!currentUser || currentUser.role === 'student') && (
+          {currentUser?.role === 'student' && (
             <button
               onClick={() => {
                 onOpenRegisterModal();

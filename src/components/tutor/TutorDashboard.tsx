@@ -16,6 +16,7 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   User,
   MessageSquare,
   FileText,
@@ -28,6 +29,7 @@ import {
   ArrowRight,
   ShieldAlert,
 } from 'lucide-react';
+import { STANDARD_TUTORING_TIME_SLOTS } from './TutorRegistrationModal';
 
 interface TutorDashboardProps {
   onOpenEditProfile: () => void;
@@ -78,6 +80,9 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
   const [feedbackBooking, setFeedbackBooking] = useState<Booking | null>(null);
   const [feedbackInput, setFeedbackInput] = useState('');
 
+  // Availability slot deletion confirmation state
+  const [slotToDelete, setSlotToDelete] = useState<AvailabilitySlot | null>(null);
+
   // Inline slot addition state
   const [showAddSlot, setShowAddSlot] = useState(false);
   const [newDay, setNewDay] = useState<'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday'>('Monday');
@@ -97,12 +102,14 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
           This dashboard is reserved for verified LAU Peer Tutors to set their weekly availability slots, accept or decline session requests, and submit post-session feedback.
         </p>
         <div className="flex items-center justify-center gap-2.5">
-          <button
-            onClick={() => onOpenRegisterModal?.()}
-            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
-          >
-            Apply to Become a Tutor
-          </button>
+          {currentUser?.role === 'student' && onOpenRegisterModal && (
+            <button
+              onClick={() => onOpenRegisterModal?.()}
+              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+            >
+              Apply to Become a Tutor
+            </button>
+          )}
           <button
             onClick={onBrowseTutors}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg cursor-pointer"
@@ -302,33 +309,43 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
         </div>
       </div>
 
-      {/* Decline Reason Modal */}
+      {/* Decline Reason Modal with Are You Sure Confirmation */}
       {decliningBookingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-xl border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-900 mb-1">Decline Session Request</h3>
-            <p className="text-xs text-slate-500 mb-3">
-              Optionally provide a reason so the student can pick a different time.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
+            <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              Are you sure you want to decline this request?
+            </h3>
+            <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+              Declining will notify the student that you cannot host this session and the reserved slot will be released. You can optionally share a reason or suggest an alternate time below.
             </p>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Reason for student (optional):
+            </label>
             <textarea
               rows={3}
               value={declineReason}
               onChange={e => setDeclineReason(e.target.value)}
-              placeholder="e.g. Have a midterm exam at this time, please book on Thursday..."
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 mb-3 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+              placeholder="e.g. Schedule conflict with a midterm exam, please book my Thursday slot..."
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 mb-4 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
             />
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-2.5">
               <button
+                type="button"
                 onClick={() => setDecliningBookingId(null)}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer"
+                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg transition-colors cursor-pointer"
               >
-                Back
+                Keep Request
               </button>
               <button
+                type="button"
                 onClick={handleConfirmDecline}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-colors cursor-pointer"
               >
-                Confirm Decline
+                Yes, Decline Request
               </button>
             </div>
           </div>
@@ -659,14 +676,17 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
 
               <div>
                 <label className="block text-slate-600 mb-1">Time Slot</label>
-                <input
-                  type="text"
+                <select
                   value={newTime}
                   onChange={e => setNewTime(e.target.value)}
-                  placeholder="e.g. 14:00 - 15:00"
-                  className="w-full p-2 bg-white border border-slate-200 rounded-lg"
-                  required
-                />
+                  className="w-full p-2 bg-white border border-slate-200 rounded-lg cursor-pointer font-mono font-semibold text-emerald-900"
+                >
+                  {STANDARD_TUTORING_TIME_SLOTS.map(slot => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -733,7 +753,8 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
               </div>
 
               <button
-                onClick={() => handleDeleteSlot(slot.id)}
+                type="button"
+                onClick={() => setSlotToDelete(slot)}
                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                 title="Remove slot"
               >
@@ -743,6 +764,42 @@ export const TutorDashboard: React.FC<TutorDashboardProps> = ({
           ))}
         </div>
       </section>
+
+      {/* Remove Slot Confirmation Modal */}
+      {slotToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
+            <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              Are you sure you want to remove this availability slot?
+            </h3>
+            <p className="text-xs text-slate-600 mb-5 leading-relaxed">
+              Are you sure you want to remove <strong>{slotToDelete.dayOfWeek} ({slotToDelete.timeSlot})</strong>? Students will no longer be able to request tutoring sessions during this recurring slot.
+            </p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSlotToDelete(null)}
+                className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Keep Slot
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleDeleteSlot(slotToDelete.id);
+                  setSlotToDelete(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                Yes, Remove Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

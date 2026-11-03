@@ -30,6 +30,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [selectedFormat, setSelectedFormat] = useState<SessionFormat>('In-Person');
   const [studentNote, setStudentNote] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Synchronize when tutor changes
   useEffect(() => {
@@ -43,6 +44,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       setSelectedFormat(tutor.availability[0]?.format || 'In-Person');
       setStudentNote('');
       setValidationError(null);
+      setIsSubmitted(false);
     }
   }, [tutor?.id]);
 
@@ -121,8 +123,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     });
 
     if (result.success) {
-      onBookingSuccess();
-      onClose();
+      setIsSubmitted(true);
+      setTimeout(() => {
+        onBookingSuccess();
+        onClose();
+        setIsSubmitted(false);
+      }, 2000);
     } else {
       setValidationError(result.error || 'Failed to submit booking request.');
     }
@@ -148,7 +154,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             )}
             <div>
               <h3 className="text-base font-bold text-slate-900 leading-tight">
-                Request Peer Tutoring Session
+                {isSubmitted ? 'Booking Request Submitted!' : 'Request Peer Tutoring Session'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 with <strong className="text-slate-800">{tutor.fullName}</strong> · {tutor.hourlyRate === 0 ? 'Free Peer Volunteer' : `$${tutor.hourlyRate}/hr`}
@@ -163,8 +169,33 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
+        {/* Success Notification View */}
+        {isSubmitted ? (
+          <div className="p-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-xs">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                Notification Sent to {tutor.fullName}!
+              </h3>
+              <p className="text-xs text-slate-600 max-w-sm mx-auto mt-1 leading-relaxed">
+                Your request to book <strong>{selectedSlot}</strong> on <strong>{selectedDate}</strong> for <strong>{selectedCourse}</strong> has been submitted.
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl max-w-sm mx-auto text-left text-xs text-emerald-950 flex items-start gap-2.5">
+              <Clock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-emerald-900">Awaiting Tutor Confirmation</p>
+                <p className="text-[11px] text-emerald-800 mt-0.5">
+                  A notification has been dispatched to {tutor.fullName}. You can track this pending session in <strong>My Sessions</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Modal Form */
+          <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
           {/* Active Student Persona Indicator */}
           <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 flex items-center justify-between">
             <span className="text-emerald-950 font-medium">
@@ -370,6 +401,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

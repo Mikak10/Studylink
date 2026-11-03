@@ -519,12 +519,11 @@ export const AdminApprovalPanel: React.FC = () => {
                 <div>
                   <h3 className="text-base font-bold leading-tight">
                     {actionType === 'APPROVE'
-                      ? 'Approve Peer Tutor Application'
-                      : 'Decline Tutor Application'}
+                      ? 'Are you sure you want to approve this application?'
+                      : 'Are you sure you want to decline this application?'}
                   </h3>
-                  <p className="text-xs opacity-80 mt-0.5">
-                    Applicant: <strong>{selectedAppForAction.applicantName}</strong> (
-                    {selectedAppForAction.major})
+                  <p className="text-xs opacity-90 mt-0.5">
+                    Applicant: <strong>{selectedAppForAction.applicantName}</strong> &bull; {selectedAppForAction.major} ({selectedAppForAction.campus})
                   </p>
                 </div>
               </div>
