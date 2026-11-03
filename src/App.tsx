@@ -21,18 +21,8 @@ import { CheckCircle2, ShieldAlert } from 'lucide-react';
 function MainAppContent() {
   const { toastMessage, currentUser, activePersona, bookings, updateBookingStatus } = useStudyLinkData();
 
-  // Navigation tab
-  const [activeTab, setActiveTab] = useState<'find' | 'sessions' | 'dashboard' | 'become-tutor' | 'admin'>(() => {
-    try {
-      const saved = localStorage.getItem('lausl_current_user_v2');
-      if (saved) {
-        const user = JSON.parse(saved);
-        if (user?.role === 'admin') return 'admin';
-        if (user?.role === 'tutor') return 'dashboard';
-      }
-    } catch {}
-    return 'find';
-  });
+  // Navigation tab - starts on Find a Tutor catalog
+  const [activeTab, setActiveTab] = useState<'find' | 'sessions' | 'dashboard' | 'become-tutor' | 'admin'>('find');
 
   // Modals state
   const [selectedTutorForProfile, setSelectedTutorForProfile] = useState<TutorProfile | null>(null);

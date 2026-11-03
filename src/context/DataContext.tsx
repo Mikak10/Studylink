@@ -119,10 +119,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
   }, [accounts]);
 
-  // 2. Current Logged-in User
+  // 2. Current Logged-in User (Session-scoped: starts signed out by default whenever opening the app)
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+      // Clean up any legacy persistent user from localStorage so Chrome never auto-logs in as admin
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem('lausl_current_user_v2');
+      localStorage.removeItem('lausl_persona_v2');
+      localStorage.removeItem('lausl_persona');
+
+      // Check active browser tab session only
+      const saved = sessionStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (saved) return JSON.parse(saved);
       return null;
     } catch {
@@ -131,11 +138,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
-    } else {
+    try {
+      if (currentUser) {
+        sessionStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      }
+      // Always guarantee localStorage has no persistent user login
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-    }
+      localStorage.removeItem('lausl_current_user_v2');
+    } catch {}
   }, [currentUser]);
 
   // 3. Auth Modal State
@@ -334,6 +346,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Logout handler
   const logout = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      localStorage.removeItem('lausl_current_user_v2');
+    } catch {}
     setCurrentUser(null);
     showToast('You have been signed out.');
   };
@@ -930,9 +947,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
     localStorage.removeItem(STORAGE_KEYS.APPLICATIONS);
+    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
 
     setAccounts(INITIAL_ACCOUNTS);
-    setCurrentUser(INITIAL_ACCOUNTS[0]);
+    setCurrentUser(null);
     setTutors(INITIAL_TUTORS);
     setBookings(INITIAL_BOOKINGS);
     setReviews(INITIAL_REVIEWS);
